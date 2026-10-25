@@ -45,6 +45,21 @@ To make sure this wasn't a floor or ceiling problem, we ran two reference polici
 
 All three SNN conditions sit at the random level, and the oracle shows there was room to do better.
 
+## Reviewer Revision: ANN Baseline Branch (`revision/ann-baseline`)
+
+> [!NOTE]
+> Following the submission of our initial paper focused on the SNN model, an additional experiment was conducted as part of the reviewer response process to test whether an artificial neural network (ANN) with a centered policy gradient baseline could learn the exact same Pong environment.
+
+The code and findings for this experiment are hosted on the **[`revision/ann-baseline`](https://github.com/raahiin21/dishbrain-snn-rstdp/tree/revision/ann-baseline)** branch:
+- **Baseline Model:** A 1-hidden-layer feedforward ANN (32 `tanh` units) trained with discrete REINFORCE and an exponential running reward baseline ($\alpha = 0.01$).
+- **Key Finding:** While the SNN stayed pinned at random chance (~0.49 rally length, ~33% hit rate), the ANN baseline achieved **0.844 ± 0.025** rally length and **45.8%** hit rate over the same 10 seeds.
+- **Implication:** Confirms that the Pong task environment provides an effective learning signal when paired with appropriate credit assignment and variance reduction, isolating the learning bottleneck specifically to the minimal R-STDP formulation.
+
+To view the code, raw trial outputs, and dedicated documentation for the ANN experiment, switch to the branch:
+```bash
+git checkout revision/ann-baseline
+```
+
 ## Why we think it didn't learn
 
 Frémaux, Sprekeler & Gerstner (2010) showed that R-STDP only learns reliably when the reward signal is centred, meaning its prediction error averages to zero. Our raw +1/-1 reward isn't centred, and the weight drift we see is consistent with that bias rather than with the network picking up a useful policy. This is our interpretation, and we didn't test it here. The obvious follow-up is subtracting a running reward baseline before gating the eligibility trace. Other things we left out (hidden layers, inhibition, spontaneous activity, criticality) could also matter, and this experiment can't tell them apart.
