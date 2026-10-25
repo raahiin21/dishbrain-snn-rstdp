@@ -36,74 +36,86 @@ Every paired Wilcoxon test between conditions gives p > 0.1 (most are above 0.4)
 
 The weights are clearly moving under `stimulus` (the blue line in `fig2_weight_change.png`), but that doesn't show up in behaviour.
 
-To make sure this wasn't a floor or ceiling problem, we ran two reference policies in the same environment (`benchmark_policies.py`):
+To contextualize this performance, we evaluated benchmark policies in the same environment:
 
-| Policy | Mean rally length | Hit rate |
-|---|---|---|
-| Random 50/50 | ≈ 0.49 | ≈ 33% |
-| Oracle (always steps toward the ball) | ≈ 1.2 | ≈ 55% |
+| Policy / Architecture | Mean rally length | Hit rate | Zero-hit (ace) rate |
+|---|---|---|---|
+| SNN (stimulus, R-STDP) | 0.487 ± 0.016 | ≈ 32.8% | 68.0% |
+| SNN (no-feedback control) | 0.485 ± 0.018 | ≈ 32.7% | 67.9% |
+| Random 50/50 | ≈ 0.49 | ≈ 33.0% | ≈ 67.0% |
+| ANN Baseline (REINFORCE) | **0.844 ± 0.025** | **45.8%** | **55.0%** |
+| Oracle (steps toward ball) | ≈ 1.20 | ≈ 55.0% | ≈ 45.0% |
 
-All three SNN conditions sit at the random level, and the oracle shows there was room to do better.
+While all three SNN conditions stay pinned at the random baseline, the ANN baseline demonstrates that an active policy gradient agent easily learns in this environment and climbs well toward the oracle.
 
-## Reviewer Revision: ANN Baseline Branch (`revision/ann-baseline`)
+## Revision Experiment: ANN Baseline
 
 > [!NOTE]
-> Following the submission of our initial paper focused on the SNN model, an additional experiment was conducted as part of the reviewer response process to test whether an artificial neural network (ANN) with a centered policy gradient baseline could learn the exact same Pong environment.
+> Following the submission of our initial paper focused on the SNN model, this ANN baseline experiment was conducted as part of the reviewer revision process to test whether a standard policy gradient architecture with a centered baseline can learn the exact same Pong environment.
 
-The code and findings for this experiment are hosted on the **[`revision/ann-baseline`](https://github.com/raahiin21/dishbrain-snn-rstdp/tree/revision/ann-baseline)** branch:
-- **Baseline Model:** A 1-hidden-layer feedforward ANN (32 `tanh` units) trained with discrete REINFORCE and an exponential running reward baseline ($\alpha = 0.01$).
-- **Key Finding:** While the SNN stayed pinned at random chance (~0.49 rally length, ~33% hit rate), the ANN baseline achieved **0.844 ± 0.025** rally length and **45.8%** hit rate over the same 10 seeds.
-- **Implication:** Confirms that the Pong task environment provides an effective learning signal when paired with appropriate credit assignment and variance reduction, isolating the learning bottleneck specifically to the minimal R-STDP formulation.
+### Architecture & Setup
+- **Input:** Identical 20-dimensional one-hot state mapping as the SNN (`relative_to_channel`).
+- **Network:** Feedforward network with a 32-unit `tanh` hidden layer (`20 -> 32 -> 2`) predicting softmax action probabilities (LEFT vs. RIGHT).
+- **Learning Rule:** Online REINFORCE policy gradient with an exponential running reward baseline ($\alpha = 0.01$) to center advantage estimates.
+- **Exploration:** 10% $\epsilon$-greedy exploration with full policy-gradient probability correction.
+- **Evaluation:** Run across the identical 10 random seeds (42–51) for 3,000 trials.
 
-To view the code, raw trial outputs, and dedicated documentation for the ANN experiment, switch to the branch:
-```bash
-git checkout revision/ann-baseline
-```
+### Findings
+- The ANN baseline achieved a mean rally length of **0.844 ± 0.025** and a **45.8%** hit rate, compared to 0.487 and 32.8% for the SNN.
+- This confirms the simplified Pong environment provides a clear, learnable gradient when paired with credit assignment and a centered baseline, underscoring that the SNN's failure stems from the minimal R-STDP mechanism rather than task insolubility.
 
-## Why we think it didn't learn
+## Why we think the SNN didn't learn
 
-Frémaux, Sprekeler & Gerstner (2010) showed that R-STDP only learns reliably when the reward signal is centred, meaning its prediction error averages to zero. Our raw +1/-1 reward isn't centred, and the weight drift we see is consistent with that bias rather than with the network picking up a useful policy. This is our interpretation, and we didn't test it here. The obvious follow-up is subtracting a running reward baseline before gating the eligibility trace. Other things we left out (hidden layers, inhibition, spontaneous activity, criticality) could also matter, and this experiment can't tell them apart.
+Frémaux, Sprekeler & Gerstner (2010) showed that R-STDP only learns reliably when the reward signal is centred, meaning its prediction error averages to zero. Our raw +1/-1 reward in the SNN isn't centred, and the weight drift we see is consistent with that bias rather than with the network picking up a useful policy. The successful learning in our ANN baseline with a running baseline reinforces this interpretation. Other architectural elements omitted from the minimal SNN (hidden layers, lateral inhibition, spontaneous activity, criticality) may also be essential.
 
 ## Details that aren't obvious from the paper
 
 - **A "trial" is one volley, not one rally.** Each trial is one decision by the network. 3,000 trials means 3,000 paddle moves, which end up being many short rallies. Rally length is measured over completed rallies.
 - **A hit means the paddle lands within ±1 of the ball** (`HIT_TOLERANCE` in `pong.py`).
-- **10% of actions are random** (`EXPLORATION_RATE` in `config.py`), on top of the spike-count decision.
+- **10% of actions are random** (`EXPLORATION_RATE` in `config.py`), on top of the model decision.
 - **`SYNAPTIC_GAIN = 10`** was calibrated by hand. With weights in [-1, 1] and no gain, the output neurons barely fire, and R-STDP has nothing to learn from without postsynaptic spikes.
 - Initial weights are drawn from N(0, 0.1²) and clipped to [-1, 1].
 - Input channels 0, 18 and 19 are never used. The offset range only reaches channels 1–17.
 
 ## Running it
 
-```
+```bash
 pip install -r requirements.txt
-python3 run_experiment.py        # all 30 runs, writes results/raw/ (a few minutes)
-python3 analysis.py              # tables and stats -> results/summary/
+
+# Original SNN Experiment
+python3 run_experiment.py        # all 30 SNN runs -> results/raw/ (a few minutes)
+python3 analysis.py              # statistical analysis -> results/summary/
 python3 make_figures.py          # figures -> results/figures/
 python3 benchmark_policies.py    # random and oracle reference policies
+
+# ANN Baseline Experiment (branch: revision/ann-baseline)
+python3 ann_baseline.py          # 10 seeds, 3000 trials -> results_ann/
 ```
 
-Everything is seeded. Re-running `run_experiment.py` gives the same raw CSVs that are already in `results/raw/`.
+Everything is seeded and deterministic across runs.
 
 ## Layout
 
 ```
-config.py              all parameters
-neuron.py              LIF neuron
+config.py              all parameters for the SNN experiment
+neuron.py              LIF neuron implementation
 encoding.py            offset -> input channel -> spike train
-network.py             20 -> 2 network
-pong.py                the environment
+network.py             20 -> 2 spiking network
+pong.py                1D Pong environment
 learning.py            R-STDP with eligibility trace
-experiment_runner.py   one (condition, seed) run
-run_experiment.py      all conditions x seeds
+experiment_runner.py   one (condition, seed) SNN run
+run_experiment.py      all SNN conditions x seeds
 analysis.py            summaries and statistical tests
-make_figures.py        the four figures
+make_figures.py        the four experiment figures
 benchmark_policies.py  random / oracle reference policies
-results/raw/           per-trial logs, one CSV per run
-results/summary/       aggregated tables and tests
+ann_baseline.py        ANN REINFORCE baseline (revision/ann-baseline)
+results/raw/           per-trial SNN logs, one CSV per run
+results/summary/       aggregated tables and statistical tests
 results/figures/       figures used in the paper
+results_ann/           ANN baseline logs, seed summaries, and learning curves
 ```
 
 ## License
 
 MIT, see `LICENSE`.
+
