@@ -117,7 +117,7 @@ def fig3_ace_rate_curve():
 
     ax.set_xlabel("Trial")
     ax.set_ylabel("Ace rate (block-averaged, \u00b1 1 SD across seeds)")
-    ax.set_title("Experiment 1: Ace Rate Over Training")
+    ax.set_title("Zero-Hit Completed-Rally Rate Over Training")
     ax.legend()
     ax.grid(alpha=0.3)
     fig.tight_layout()
